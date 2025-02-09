@@ -32,7 +32,8 @@ cp GoogleIDPMetadata.xml idp-metadata
 docker compose up -d
 ~~~
 
-Your guacamole server should now be available at `https://ip of your server:8443/guacamole`. The default username is `guacadmin` with password `guacadmin`.
+Your guacamole server should now be available at `http://localhost:8080/guacamole`. The default username is `guacadmin` with password `guacadmin`. You should use an `nginx` reverse proxy to allow other
+people to access it; there's a template in the `nginx/templates` directory.
 
 ## Details
 To understand some details let's take a closer look at parts of the `docker-compose.yml` file:
