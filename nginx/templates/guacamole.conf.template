@@ -2,33 +2,41 @@
 server {
     listen       443 ssl;
     http2  on;
-    server_name  localhost;
+    server_name  guacamole.example.com;
 
-        ssl_certificate /etc/nginx/ssl/self.cert;
-        ssl_certificate_key /etc/nginx/ssl/self-ssl.key;
+    ssl_certificate /etc/nginx/ssl/self.cert;
+    ssl_certificate_key /etc/nginx/ssl/self-ssl.key;
 
-        ssl_protocols TLSv1.2 TLSv1.3;
-        ssl_prefer_server_ciphers on;
-        ssl_ciphers "EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH";
-        ssl_ecdh_curve secp384r1;
-        ssl_session_cache shared:SSL:10m;
-        ssl_session_tickets off;
-        ssl_stapling off;
-        ssl_stapling_verify off;
+    # modern configuration
+    ssl_protocols TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ecdh_curve X25519:prime256v1:secp384r1;
+
+    # HSTS (ngx_http_headers_module is required) (63072000 seconds)
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
+
+    # other security headers
+    add_header X-Frame-Options "SAMEORIGIN";
+
+    location /guacamole/ {
+        proxy_pass http://guacamole:8080/;
+        
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $http_connection;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host $host;    
+
+        client_max_body_size 4096m;
+    }
 
     location / {
-    proxy_pass http://guacamole:8080/guacamole/;
-    proxy_buffering off;
-    proxy_http_version 1.1;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection $http_connection;
-    proxy_cookie_path /guacamole/ /;
-    access_log off;
-    # allow large uploads (default=1m)
-    # 4096m = 4GByte
-    client_max_body_size 4096m;
-}
+        rewrite ^(/)?$ https://$host/guacamole/ permanent;
+    }
 
     #error_page  404              /404.html;
 

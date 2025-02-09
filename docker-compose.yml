@@ -1,6 +1,7 @@
 ####################################################################################
 # docker-compose file for Apache Guacamole
 # created by PCFreak 2017-06-28
+# modified by DP 2025-02-09 for Google SAML2
 #
 # Apache Guacamole is a clientless remote desktop gateway. It supports standard
 # protocols like VNC, RDP, and SSH. We call it clientless because no plugins or
@@ -137,30 +138,41 @@ services:
       POSTGRES_PASSWORD: 'ChooseYourOwnPasswordHere1234'
       POSTGRES_USER: guacamole_user
       RECORDING_SEARCH_PATH: /record
+      SAML_IDP_METADATA_URL: file:///idp-metadata/GoogleIDPMetadata.xml
+      SAML_ENTITY_ID: https://guacamole.example.com
+      SAML_CALLBACK_URL: https://guacamole.example.com/guacamole
+      REMOTE_IP_VALVE_ENABLED: true
+      SAML_STRICT: true
+      ## Uncomment this line to allow PostgreSQL authentication and optional SAML
+      #EXTENSION_PRIORITY: '*, saml'
+      ## Uncomment this line to allow only SAML authentication
+      EXTENSION_PRIORITY: saml
+      SAML_GROUP_ATTRIBUTE: groups
     image: guacamole/guacamole
     networks:
       - guacnetwork_compose
     volumes:
       - ./record:/record:rw
+      - ./idp-metadata:/idp-metadata:ro
     ports:
 ## enable next line if not using nginx
-##    - 8080:8080/tcp # Guacamole is on :8080/guacamole, not /.
+    - 8080:8080/tcp # Guacamole is on :8080/guacamole, not /.
 ## enable next line when using nginx
-    - 8080/tcp
+#    - 8080/tcp
     restart: always
 
 ########### optional ##############
-  # nginx
-  nginx:
-   container_name: nginx_guacamole_compose
-   restart: always
-   image: nginx:latest
-   volumes:
-   - ./nginx/templates:/etc/nginx/templates:ro
-   - ./nginx/ssl/self.cert:/etc/nginx/ssl/self.cert:ro
-   - ./nginx/ssl/self-ssl.key:/etc/nginx/ssl/self-ssl.key:ro
-   ports:
-   - 8443:443
-   networks:
-     - guacnetwork_compose
+#  # nginx
+#  nginx:
+#   container_name: nginx_guacamole_compose
+#   restart: always
+#   image: nginx:latest
+#   volumes:
+#   - ./nginx/templates:/etc/nginx/templates:ro
+#   - ./nginx/ssl/self.cert:/etc/nginx/ssl/self.cert:ro
+#   - ./nginx/ssl/self-ssl.key:/etc/nginx/ssl/self-ssl.key:ro
+#   ports:
+#   - 8443:443
+#   networks:
+#     - guacnetwork_compose
 ####################################################################################
