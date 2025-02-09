@@ -1,7 +1,7 @@
 ####################################################################################
 # docker-compose file for Apache Guacamole
 # created by PCFreak 2017-06-28
-# modified by DP 2025-02-09 for Google SAML2
+# modified by DP 2025-02-09 for Google SAML2 and remove nginx
 #
 # Apache Guacamole is a clientless remote desktop gateway. It supports standard
 # protocols like VNC, RDP, and SSH. We call it clientless because no plugins or
@@ -17,7 +17,6 @@
 # - create a service 'guacd_compose' from 'guacamole/guacd' connected to 'guacnetwork_compose'
 # - create a service 'postgres_guacamole_compose' (1) from 'postgres' connected to 'guacnetwork_compose'
 # - create a service 'guacamole_compose' (2)  from 'guacamole/guacamole/' conn. to 'guacnetwork_compose'
-# - create a service 'nginx_guacamole_compose' (3) from 'nginx' connected to 'guacnetwork_compose'
 #
 # (1)
 #  DB-Init script is in './init/initdb.sql' it has been created executing
@@ -43,23 +42,8 @@
 #  as configured under (1)
 #
 # (3)
-#  ./nginx/templates folder will be mapped read-only into the container at /etc/nginx/templates
-#  and according to the official nginx container docs the guacamole.conf.template will be
-#  placed in /etc/nginx/conf.d/guacamole.conf after container startup.
-#  ./nginx/ssl will be mapped into the container at /etc/nginx/ssl
-#  prepare.sh creates a a self-signed certificate. If you want to use your own certs
-#  just remove the part that generates the certs from prepare.sh and replace
-#  'self-ssl.key' and 'self.cert' with your certificate.
-#  nginx will export port 8443 to the outside world, make sure that this port is reachable
-#  on your system from the "outside world". All other traffic is only internal.
-#
-#  You could remove the entire 'nginx' service from this file if you want to use your own
-#  reverse proxy in front of guacamole. If doing so, make sure you change the line
-#   from     - 8080/tcp
-#   to       - 8080:8080/tcp
-#  within the 'guacamole' service. This will expose the guacamole webinterface directly
-#  on port 8080 and you can use it for your own purposes.
-#  Note: Guacamole is available on :8080/guacamole, not /.
+#  In the ./nginx/templates directory there's a template for nginx configuration, that you
+#  can use for reverse proxy configuration.
 #
 # !!!!! FOR INITAL SETUP (after git clone) run ./prepare.sh once
 #
@@ -74,20 +58,7 @@
 #
 # Make sure you change it immediately!
 #
-# version            date              comment
-# 0.1                2017-06-28        initial release
-# 0.2                2017-10-09        minor fixes + internal GIT push
-# 0.3                2017-10-09        minor fixes + public GIT push
-# 0.4                2019-08-14        creating of ssl certs now in prepare.sh
-#                                      simplified nginx startup commands
-# 0.5                2023-02-24        nginx now uses a template + some minor changes
-# 0.6                2023-03-23        switched to postgres 15.2-alpine
-# 0.61               2024-07-27        fix networks + version 3.0
-# 0.62               2024-07-27        fix
 #####################################################################################
-
-#the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion
-#version: '3.0'
 
 # networks
 # create a network 'guacnetwork_compose' in mode 'bridged'
@@ -143,10 +114,10 @@ services:
       SAML_CALLBACK_URL: https://guacamole.example.com/guacamole
       REMOTE_IP_VALVE_ENABLED: true
       SAML_STRICT: true
-      ## Uncomment this line to allow PostgreSQL authentication and optional SAML
-      #EXTENSION_PRIORITY: '*, saml'
+      ## Uncomment this line to allow PostgreSQL authentication and optional SAML (default)
+      EXTENSION_PRIORITY: '*, saml'
       ## Uncomment this line to allow only SAML authentication
-      EXTENSION_PRIORITY: saml
+      #EXTENSION_PRIORITY: saml
       SAML_GROUP_ATTRIBUTE: groups
     image: guacamole/guacamole
     networks:
@@ -155,24 +126,5 @@ services:
       - ./record:/record:rw
       - ./idp-metadata:/idp-metadata:ro
     ports:
-## enable next line if not using nginx
-    - 8080:8080/tcp # Guacamole is on :8080/guacamole, not /.
-## enable next line when using nginx
-#    - 8080/tcp
+    - 8080:8080/tcp
     restart: always
-
-########### optional ##############
-#  # nginx
-#  nginx:
-#   container_name: nginx_guacamole_compose
-#   restart: always
-#   image: nginx:latest
-#   volumes:
-#   - ./nginx/templates:/etc/nginx/templates:ro
-#   - ./nginx/ssl/self.cert:/etc/nginx/ssl/self.cert:ro
-#   - ./nginx/ssl/self-ssl.key:/etc/nginx/ssl/self-ssl.key:ro
-#   ports:
-#   - 8443:443
-#   networks:
-#     - guacnetwork_compose
-####################################################################################

@@ -1,13 +1,25 @@
-# Guacamole with docker compose
-This is a small documentation how to run a fully working **Apache Guacamole (incubating)** instance with docker (docker compose). The goal of this project is to make it easy to test Guacamole.
+# Guacamole with docker compose and Google SAML2 auth
+This is a small documentation how to run a fully working **Apache Guacamole** instance with docker (docker compose) and enable SAML2 authentication with
+[Google Workspace](https://support.google.com/a/answer/6087519).
 
 ## About Guacamole
-Apache Guacamole (incubating) is a clientless remote desktop gateway. It supports standard protocols like VNC, RDP, and SSH. It is called clientless because no plugins or client software are required. Thanks to HTML5, once Guacamole is installed on a server, all you need to access your desktops is a web browser.
+Apache Guacamole is a clientless remote desktop gateway. It supports standard protocols like VNC, RDP, and SSH. It is called clientless because no plugins or client software are required. Thanks to HTML5, once Guacamole is installed on a server, all you need to access your desktops is a web browser.
 
-It supports RDP, SSH, Telnet and VNC and is the fastest HTML5 gateway I know. Checkout the projects [homepage](https://guacamole.incubator.apache.org/) for more information.
+It supports RDP, SSH, Telnet and VNC and is the fastest HTML5 gateway I know. Checkout the projects [homepage](https://guacamole.apache.org/) for more information.
 
 ## Prerequisites
-You need a working **docker** installation and **docker compose** running on your machine.
+You need a working **docker** installation and **docker compose** running on your machine. We assume that the machine
+is registered in the DNS as `guacamole.example.com`.
+
+## Google Workspace configuration
+Follow the [official documentation](https://support.google.com/a/answer/6087519) to add a custom SAML 2.0 app.
+Downlad the IDP metatada file `GoogleIDPMetadata.xml` and set the following parameters.
+
+- **ACS URL**: https://guacamole.example.com/guacamole/api/ext/saml/callback
+- **Entity ID**: https://guacamole.example.com
+
+Leave the rest with the default values. If you need groups, map the Google groups you'd like to use in Guacamole with the 
+app attribute `groups`.
 
 ## Quick start
 Clone the GIT repository and start guacamole:
@@ -16,10 +28,11 @@ Clone the GIT repository and start guacamole:
 git clone "https://github.com/boschkundendienst/guacamole-docker-compose.git"
 cd guacamole-docker-compose
 ./prepare.sh
+cp GoogleIDPMetadata.xml idp-metadata
 docker compose up -d
 ~~~
 
-Your guacamole server should now be available at `https://ip of your server:8443/`. The default username is `guacadmin` with password `guacadmin`.
+Your guacamole server should now be available at `https://ip of your server:8443/guacamole`. The default username is `guacadmin` with password `guacadmin`.
 
 ## Details
 To understand some details let's take a closer look at parts of the `docker-compose.yml` file:
@@ -79,7 +92,8 @@ The following part of docker-compose.yml will create an instance of PostgreSQL u
 ~~~
 
 #### Guacamole
-The following part of docker-compose.yml will create an instance of guacamole by using the docker image `guacamole` from docker hub. It is also highly configurable using environment variables. In this setup it is configured to connect to the previously created postgres instance using a username and password and the database `guacamole_db`. Port 8080 is only exposed locally! We will attach an instance of nginx for public facing of it in the next step.
+The following part of docker-compose.yml will create an instance of guacamole by using the docker image `guacamole` from docker hub. It is also highly configurable using environment variables. In this setup it is configured to connect to the previously created postgres instance using a username and password and the database `guacamole_db`. Other settings are used to connect to
+the Google Workspace IDP. With the default settings, SAML 2.0 authentication is optional.
 
 ~~~python
 ...
@@ -92,40 +106,28 @@ The following part of docker-compose.yml will create an instance of guacamole by
       GUACD_HOSTNAME: guacd
       POSTGRES_DATABASE: guacamole_db
       POSTGRES_HOSTNAME: postgres
-      POSTGRES_PASSWORD: ChooseYourOwnPasswordHere1234
+      POSTGRES_PASSWORD: 'ChooseYourOwnPasswordHere1234'
       POSTGRES_USER: guacamole_user
+      RECORDING_SEARCH_PATH: /record
+      SAML_IDP_METADATA_URL: file:///idp-metadata/GoogleIDPMetadata.xml
+      SAML_ENTITY_ID: https://guacamole.example.com
+      SAML_CALLBACK_URL: https://guacamole.example.com/guacamole
+      REMOTE_IP_VALVE_ENABLED: true
+      SAML_STRICT: true
+      ## Uncomment this line to allow PostgreSQL authentication and optional SAML (default)
+      EXTENSION_PRIORITY: '*, saml'
+      ## Uncomment this line to allow only SAML authentication
+      #EXTENSION_PRIORITY: saml
+      SAML_GROUP_ATTRIBUTE: groups
     image: guacamole/guacamole
-    links:
-    - guacd
     networks:
-      guacnetwork_compose:
+      - guacnetwork_compose
+    volumes:
+      - ./record:/record:rw
+      - ./idp-metadata:/idp-metadata:ro
     ports:
-    - 8080/tcp
-    restart: always
-...
-~~~
-
-#### nginx
-The following part of docker-compose.yml will create an instance of nginx that maps the public port 8443 to the internal port 443. The internal port 443 is then mapped to guacamole using the `./nginx/templates/guacamole.conf.template` file. The container will use the previously generated (`prepare.sh`) self-signed certificate in `./nginx/ssl/` with `./nginx/ssl/self-ssl.key` and `./nginx/ssl/self.cert`.
-
-~~~python
-...
-  # nginx
-  nginx:
-   container_name: nginx_guacamole_compose
-   restart: always
-   image: nginx
-   volumes:
-   - ./nginx/templates:/etc/nginx/templates:ro
-   - ./nginx/ssl/self.cert:/etc/nginx/ssl/self.cert:ro
-   - ./nginx/ssl/self-ssl.key:/etc/nginx/ssl/self-ssl.key:ro
-   ports:
-   - 8443:443
-   links:
-   - guacamole
-   networks:
-     guacnetwork_compose:
-...
+    - 8080:8080/tcp # Guacamole is on :8080/guacamole, not /.
+    restart: always...
 ~~~
 
 ## prepare.sh
@@ -137,9 +139,6 @@ docker run --rm guacamole/guacamole /opt/guacamole/bin/initdb.sh --postgresql > 
 
 It creates the necessary database initialization file for postgres.
 
-`prepare.sh` also creates the self-signed certificate `./nginx/ssl/self.cert` and the private key `./nginx/ssl/self-ssl.key` which are used
-by nginx for https.
-
 ## reset.sh
 To reset everything to the beginning, just run `./reset.sh`.
 
@@ -150,3 +149,6 @@ Wake on LAN (WOL) does not work and I will not fix that because it is beyound th
 **Disclaimer**
 
 Downloading and executing scripts from the internet may harm your computer. Make sure to check the source of the scripts before executing them!
+
+## Credits
+Modified from: https://github.com/boschkundendienst/guacamole-docker-compose
